@@ -27,6 +27,7 @@ parser.add_argument('--temperature', type=float, default=1.0,
                     help='temperature - higher will increase diversity')
 parser.add_argument('--log-interval', type=int, default=100,
                     help='reporting interval')
+parser.add_argument('--input', type=str, default = '', help='optional input prompt')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -50,11 +51,29 @@ ntokens = len(corpus.dictionary)
 is_transformer_model = hasattr(model, 'model_type') and model.model_type == 'Transformer'
 if not is_transformer_model:
     hidden = model.init_hidden(1)
-input = torch.randint(ntokens, (1, 1), dtype=torch.long).to(device)
+
+if args.input:
+    input_raw = args.input.split()
+    input_stripped = []
+    for word in input_raw:
+        if not word in corpus.dictionary.word2idx:
+            print(f'{word} is not in the dictionary and was removed')
+            input_raw.remove(word)
+        else:
+            input_stripped.append(corpus.dictionary.word2idx[word])
+    input = torch.Tensor([input_stripped])
+
+else:
+    input = torch.randint(ntokens, (1, 1), dtype=torch.long).to(device)
 
 with open(args.outf, 'w') as outf:
-    with torch.no_grad():  # no tracking history
-        for i in range(args.words):
+    with torch.no_grad():
+        if args.input:
+            for word_idx in input:
+                word = corpus.dictionary.idx2word[word_idx]
+                outf.write(word + ' ')
+        # no tracking history
+        for i in range(args.words - len(args.input.split())):
             if is_transformer_model:
                 output = model(input, False)
                 word_weights = output[-1].squeeze().div(args.temperature).exp().cpu()
